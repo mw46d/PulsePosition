@@ -46,7 +46,9 @@ public:
 	PulsePositionOutput(int polarity);
 	bool begin(uint8_t txPin); // txPin can be 5,6,9,10,20,21,22,23
 	bool begin(uint8_t txPin, uint8_t framePin);
+	bool write(float microseconds);
 	bool write(uint8_t channel, float microseconds);
+	float read(uint8_t channel = 1);
 	friend void ftm0_isr(void);
 private:
 	void isr(void);

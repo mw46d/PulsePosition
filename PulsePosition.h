@@ -46,11 +46,13 @@ public:
 	PulsePositionOutput(int polarity);
 	bool begin(uint8_t txPin); // txPin can be 5,6,9,10,20,21,22,23
 	bool begin(uint8_t txPin, uint8_t framePin);
+	bool write(float microseconds);
 	bool write(uint8_t channel, float microseconds);
+	float read(uint8_t channel = 1);
 	friend void ftm0_isr(void);
-protected:
+private:
 	void isr(void);
-	uint32_t pulse_width[PULSEPOSITION_MAXCHANNELS+1];
+	volatile uint32_t pulse_width[PULSEPOSITION_MAXCHANNELS+1];
 	uint32_t pulse_buffer[PULSEPOSITION_MAXCHANNELS+1];
 	uint32_t pulse_remaining;
 	volatile uint8_t *framePinReg;
@@ -66,24 +68,6 @@ protected:
 	static uint8_t channelmask;
 };
 
-// MARCO - use the same ISR infrastructure to make them work together
-class PulseWidthOutput : public PulsePositionOutput {
-public:
-	// override - no frame pin used
-	bool begin(uint8_t txPin, uint8_t framePin) {
-		return PulsePositionOutput::begin(txPin, 255);
-	}
-
-	float read();
-	bool write(float microseconds);
-	// override - no channel
-	bool write(uint8_t channel, float microseconds) {
-		return write(microseconds);
-	}
-protected:
-	// override
-	void isr(void);
-}
 
 class PulsePositionInput
 {

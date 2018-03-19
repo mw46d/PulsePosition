@@ -184,10 +184,6 @@ bool PulsePositionOutput::begin(uint8_t txPin, uint8_t framePin)
 	return true;
 }
 
-bool PulsePositionOutput::write(float microseconds) {
-  return write(1, microseconds);
-}
-
 bool PulsePositionOutput::write(uint8_t channel, float microseconds)
 {
 	uint32_t i, sum, space, clocks, num_channels;
@@ -217,10 +213,60 @@ bool PulsePositionOutput::write(uint8_t channel, float microseconds)
 	return true;
 }
 
-float PulsePositionOutput::read(uint8_t channel)
-{
-	if (channel < 1 || channel > PULSEPOSITION_MAXCHANNELS) return 0.0;
-	return (float)(pulse_width[channel]) / CLOCKS_PER_MICROSECOND;
+bool PulseWidthOutput::write(float microseconds) {
+	uint32_t i, clocks, space;
+
+	if (microseconds < TX_MINIMUM_SIGNAL || microseconds > TX_MAXIMUM_SIGNAL) {
+		return false;
+	}
+
+	clocks = microseconds * CLOCKS_PER_MICROSECOND;
+
+	if (total_channels == 1 && pulse_width[1] == clocks) {
+		// Nothing changed, so early exit
+		return true;
+	}
+
+	space = TX_MINIMUM_FRAME_CLOCKS - clocks;
+
+	__disable_irq();
+	pulse_width[0] = space;
+	pulse_width[1] = clocks;
+	total_channels = 1;
+	__enable_irq();
+
+	return true;
+}
+
+float PulseWidthOutput::read() {
+	return (float)(pulse_width[1]) / CLOCKS_PER_MICROSECOND;
+}
+
+void PulseWidthOutput::isr(void) {
+	uint32_t width;
+
+	#if defined(KINETISK)
+	FTM0_MODE = 0;
+	#endif
+
+	if (pulse_remaining == 0) {
+		width = pulse_width[state];
+	}
+	else {
+		width = pulse_remaining;
+		pulse_remaining = 0;
+	}
+
+	if (width <= 60000) {
+		ftm->cv += width;
+		CSC_CHANGE_INTACK(ftm, (state ? cscClear : cscSet));
+		state = (state + 1) % 2;
+	}
+	else {
+		ftm->cv += 58000;
+		CSC_INTACK(ftm, (state ? cscSet : cscClear));
+		pulse_remaining = width - 58000;
+	}
 }
 
 void PulsePositionOutput::isr(void)
@@ -228,29 +274,6 @@ void PulsePositionOutput::isr(void)
 	#if defined(KINETISK)
 	FTM0_MODE = 0;
 	#endif
-  if (total_channels == 1) {
-    uint32_t width;
-
-    if (pulse_remaining == 0) {
-      width = pulse_width[state];
-    }
-    else {
-      width = pulse_remaining;
-      pulse_remaining = 0;
-    }
-
-    if (width <= 60000) {
-      ftm->cv += width;
-      CSC_CHANGE_INTACK(ftm, (state ? cscClear : cscSet));
-      state = (state + 1) % 2;
-    }
-    else {
-      ftm->cv += 58000;
-      CSC_INTACK(ftm, (state ? cscSet : cscClear));
-      pulse_remaining = width - 58000;
-    }
-  }
-  else {
 	if (state == 0) {
 		// pin was just set high, schedule it to go low
 		ftm->cv += TX_PULSE_WIDTH_CLOCKS;
@@ -294,7 +317,6 @@ void PulsePositionOutput::isr(void)
 			state = 2;
 		}
 	}
-  }
 }
 
 void ftm0_isr(void)
